@@ -12,6 +12,50 @@
 #include <inttypes.h>
 #include <libgen.h>
 
+#include "font_bmp.h"
+
+
+// font symbol description
+struct source_symbol_desc_s{
+  uint32_t m_code;       // code
+  uint16_t m_x;          // x-coord in font bitmat
+  uint16_t m_y;          // y-coord in font bitmap
+  uint8_t m_width;       // width in pixels of symbol bitmap
+  uint8_t m_height;      // height in pixels of symbol bitmap
+  uint8_t m_x_offset;    // x offset for display symbol
+  uint8_t m_y_offset;    // y offset for display symbol
+  uint8_t m_x_advance;   // displayed width of symbol
+};
+
+
+// source font desription
+struct source_font_desc_s{
+  const uint8_t * m_bmp;            // font symbols bmp
+  int m_bmp_width;                  // font symbols bmp width
+  int m_bmp_height;                 // font symbols bmp height
+  int m_symbols_count;              // total symbols
+  int m_row_height;                 // text row height
+  int m_def_code_idx;               // default symbol index, if symbol code not found
+  source_symbol_desc_s * m_symbols; // descriptions of symbols ptr
+  source_font_desc_s()
+    : m_bmp(0)
+    , m_bmp_width(0)
+    , m_bmp_height(0)
+    , m_symbols_count(0)
+    , m_row_height(0)
+    , m_def_code_idx(0)
+    , m_symbols(0)
+    {}
+  ~source_font_desc_s() {
+    if ( m_symbols ) {
+      delete [] m_symbols;
+    }
+    if ( m_bmp ) {
+      delete [] m_bmp;
+    }
+  }
+};
+
 
 #pragma pack(push,1)
 struct targaheader_s
@@ -36,12 +80,10 @@ struct targaheader_s
 #define TGA_DATABITS        24
 
 
-struct font_props_s {
-  const char * m_tga_file_name;
-  int m_line_height;
-  
-};
-
+// load font description from text file and bmp data from targa image file
+bool load_font_desc( FILE * a_fp, source_font_desc_s & a_dst );
+// write out .h and .c files with packed font
+void write_packed_font( FILE * a_out_h, FILE * a_out_c, const source_font_desc_s & a_src );
 
 int main( int argc, char ** argv ) {
   if ( 4 != argc ) {
@@ -69,8 +111,6 @@ int main( int argc, char ** argv ) {
     return 1;
   }
 
-  
-
   std::unique_ptr<FILE, int(*)(FILE *)> v_fp_out_h(::fopen( argv[2], "wb" ), ::fclose);
   if ( !v_fp_out_h ) {
     ::fprintf( stderr, "can't open file '%s' for write\n", argv[2] );
@@ -82,6 +122,15 @@ int main( int argc, char ** argv ) {
     ::fprintf( stderr, "can't open file '%s' for write\n", argv[3] );
     return 1;
   }
+
+
+  source_font_desc_s v_font_desc;
+  if ( !load_font_desc(v_fp_in.get(), v_font_desc) ) {
+    ::fprintf( stderr, "error loading font description from file '%s'\n", argv[1] );
+    return 1;
+  }  
+
+  write_packed_font( v_fp_out_h.get(), v_fp_out_c.get(), v_font_desc );
 
   // read targa header
   targaheader_s v_tga_head;
@@ -203,3 +252,13 @@ int main( int argc, char ** argv ) {
   
   return 0;
 }
+
+
+bool load_font_desc( FILE * a_fp, source_font_desc_s & a_dst ) {
+  return false;
+}
+
+
+void write_packed_font( FILE * a_out_h, FILE * a_out_c, const source_font_desc_s & a_src ) {
+}
+

@@ -5,29 +5,26 @@
 #include <stdbool.h>
 
 
-// symbol description
+// packed symbol description
 typedef struct {
   uint32_t m_code;       // code
-  uint16_t m_x;          // x-coord in font bitmat
-  uint16_t m_y;          // y-coord in font bitmap
+  uint32_t m_offset;     // index of first byte symbol's packed data
   uint8_t m_width;       // width in pixels of symbol bitmap
   uint8_t m_height;      // height in pixels of symbol bitmap
   uint8_t m_x_offset;    // x offset for display symbol
   uint8_t m_y_offset;    // y offset for display symbol
   uint8_t m_x_advance;   // displayed width of symbol
-} symbol_desc_s;
+} packed_symbol_desc_s;
 
 
-// font description
+// packed font description
 typedef struct {
-  int m_bmp_width;                  // font bmp width
-  int m_bmp_height;                 // font bmp height
-  const uint8_t * m_bmp;            // font bmp ptr
+  const uint8_t * m_bmp;            // font packed data ptr
   int m_symbols_count;              // total symbols
   int m_row_height;                 // text row height
   int m_def_code_idx;               // default symbol index, if symbol code not found
   const struct symbol_desc_s * m_symbols; // descriptions of symbols ptr
-} font_desc_s;
+} packed_font_desc_s;
 
 
 typedef struct {
@@ -40,7 +37,7 @@ typedef struct {
 typedef struct {
   const struct font_desc_s * m_font;      // font desc ptr
   const struct symbol_desc_s * m_symbol;  // symbol desc ptr
-  const uint8_t * m_bmp_ptr;              // symbol ptr within font bmp
+  const uint8_t * m_bmp_ptr;              // symbol packed data ptr
   int m_row;                              // current row to display
   uint16_t * m_pixbuf;                    // dst pixels row
   int m_cols_count;                       // width of pixels for symbol place
