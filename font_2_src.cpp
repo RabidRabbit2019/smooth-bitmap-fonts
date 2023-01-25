@@ -2,6 +2,7 @@
 #include <memory>
 #include <string>
 #include <algorithm>
+#include <vector>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,42 +18,33 @@
 
 // font symbol description
 struct source_symbol_desc_s{
-  uint32_t m_code;       // code
-  uint16_t m_x;          // x-coord in font bitmat
-  uint16_t m_y;          // y-coord in font bitmap
-  uint8_t m_width;       // width in pixels of symbol bitmap
-  uint8_t m_height;      // height in pixels of symbol bitmap
-  uint8_t m_x_offset;    // x offset for display symbol
-  uint8_t m_y_offset;    // y offset for display symbol
-  uint8_t m_x_advance;   // displayed width of symbol
+  int m_code;       // code
+  int m_x;          // x-coord in font bitmat
+  int m_y;          // y-coord in font bitmap
+  int m_width;       // width in pixels of symbol bitmap
+  int m_height;      // height in pixels of symbol bitmap
+  int m_x_offset;    // x offset for display symbol
+  int m_y_offset;    // y offset for display symbol
+  int m_x_advance;   // displayed width of symbol
 };
 
 
 // source font desription
 struct source_font_desc_s{
-  const uint8_t * m_bmp;            // font symbols bmp
+  std::vector<uint8_t> m_bmp;       // font symbols bmp
   int m_bmp_width;                  // font symbols bmp width
   int m_bmp_height;                 // font symbols bmp height
   int m_symbols_count;              // total symbols
   int m_row_height;                 // text row height
   int m_def_code_idx;               // default symbol index, if symbol code not found
-  source_symbol_desc_s * m_symbols; // descriptions of symbols ptr
+  std::vector<source_symbol_desc_s> m_symbols; // descriptions of symbols ptr
   source_font_desc_s()
-    : m_bmp(0)
-    , m_bmp_width(0)
+    : m_bmp_width(0)
     , m_bmp_height(0)
     , m_symbols_count(0)
     , m_row_height(0)
     , m_def_code_idx(0)
-    , m_symbols(0)
     {}
-  ~source_font_desc_s() {
-    if ( m_symbols ) {
-      delete [] m_symbols;
-    }
-    if ( m_bmp ) {
-      delete [] m_bmp;
-    }
   }
 };
 
@@ -84,6 +76,7 @@ struct targaheader_s
 bool load_font_desc( FILE * a_fp, source_font_desc_s & a_dst );
 // write out .h and .c files with packed font
 void write_packed_font( FILE * a_out_h, FILE * a_out_c, const source_font_desc_s & a_src );
+
 
 int main( int argc, char ** argv ) {
   if ( 4 != argc ) {
@@ -254,11 +247,99 @@ int main( int argc, char ** argv ) {
 }
 
 
+bool get_value( const char * a_src, const char * a_name, int & a_dst );
+bool get_value( const char * a_src, const char * a_name, std::string & a_dst );
+bool load_tga_file( const char * a_file_name, std::vector<uint8_t> & a_dst );
+
+#define LN_START_COMMON   "common "
+#define LN_START_PAGE     "page "
+#define LN_START_CHARS    "chars "
+#define LN_START_CHAR     "char "
+
+#define RD_ST_COMMON  (1 << 0)
+#define RD_ST_PAGE    (1 << 1)
+#define RD_ST_CHARS   (1 << 2)
+#define RD_ST_ALL     (RD_ST_COMMON|RD_ST_PAGE|RD_ST_CHARS)
+
+
 bool load_font_desc( FILE * a_fp, source_font_desc_s & a_dst ) {
-  return false;
+  char v_line[1024];
+  // read "common" line
+  int v_info_read_state = 0;
+  int v_char_idx = 0;
+  while ( ::fgets( v_line, sizeof(v_line), a_fp ) {
+    if ( 0 == ::strncmp( v_line, LN_START_COMMON, ::strlen(LN_START_COMMON) ) ) {
+      if ( 0 != (v_info_read_state & RD_ST_COMMON) ) {
+        ::fprintf( "more than one line with '%s' at begin\n", LN_START_COMMON );
+      }
+      if ( !get_value( v_line, "lineHeight", a_dst.m_row_height )
+        || !get_value( v_line, "scaleW", a_dst.m_bmp_width )
+        || !get_value( v_line, "scaleH", a_dst.m_bmp_height ) ) {
+        return false;
+      }
+      v_info_read_state |= RD_ST_COMMON;
+      continue;
+    }
+    if ( 0 == ::strncmp( v_line, LN_START_PAGE, ::strlen(LN_START_PAGE) ) ) {
+      if ( 0 != (v_info_read_state & RD_ST_PAGE) ) {
+        ::fprintf( "more than one line with '%s' at begin\n", LN_START_PAGE );
+      }
+      std::string v_file_name;
+      if ( !get_value( v_line, "file", v_file_name ) ) {
+        return false;
+      }
+      if ( !load_tga_file( v_line.c_str(), a_dst.m_bmp ) ) {
+        return false;
+      }
+      v_info_read_state |= RD_ST_PAGE;
+      continue;
+    }
+    if ( 0 == ::strncmp( v_line, LN_START_CHARS, ::strlen(LN_START_CHARS) ) ) {
+      if ( 0 != (v_info_read_state & RD_ST_CHARS) ) {
+        ::fprintf( "more than one line with '%s' at begin\n", LN_START_CHARS );
+      }
+      if ( !get_value( v_line, "count", a_dst.m_symbols_count ) ) {
+        return false;
+      }
+      a_dst.m_symbols.resize(a_dst.m_symbols_count);
+      v_info_read_state |= RD_ST_CHARS;
+      continue;
+    }
+    if ( 0 == ::strncmp( v_line, LN_START_CHAR, ::strlen(LN_START_CHAR) ) ) {
+      if ( RD_ST_ALL != v_info_read_state ) {
+        ::fprintf( stderr, "not all font info exists\n" );
+        return false;
+      }
+      if ( v_char_idx >= a_dst.m_symbols.size() ) {
+        ::fprintf( stderr, "char definitions more than chars count\n" );
+        return false;
+      }
+      if ( !get_value( v_line, "id", a_dst.m_symbols[v_char_idx].m_code )
+        || !get_value( v_line, "x", a_dst.m_symbols[v_char_idx].m_x )
+        || !get_value( v_line, "y", a_dst.m_symbols[v_char_idx].m_y )
+        || !get_value( v_line, "width", a_dst.m_symbols[v_char_idx].m_width )
+        || !get_value( v_line, "height", a_dst.m_symbols[v_char_idx].m_height )
+        || !get_value( v_line, "xoffset", a_dst.m_symbols[v_char_idx].m_x_offset )
+        || !get_value( v_line, "yoffset", a_dst.m_symbols[v_char_idx].m_y_offset)
+        || !get_value( v_line, "xadvance", a_dst.m_symbols[v_char_idx].m_x_advance ) ) {
+        return false;
+      }
+      ++v_char_idx;
+    }
+  }
+  // check and return result
+  return ( RD_ST_ALL == v_info_read_state
+    && !a_dst.m_symbols.empty()
+    && a_dst.m_symbols.size() == (size_t)v_char_idx );
 }
 
 
 void write_packed_font( FILE * a_out_h, FILE * a_out_c, const source_font_desc_s & a_src ) {
+  // write out font files
 }
 
+
+template<class T>
+bool get_value( const char * a_src, const char * a_name, T & a_dst ) {
+  return false;
+}
