@@ -41,8 +41,8 @@ typedef struct {
   int m_row;                              // current row to display
   uint16_t * m_pixbuf;                    // dst pixels row
   int m_cols_count;                       // width of pixels for symbol place
-  struct rgb_unpacked_s m_bgcolor;        // background colour
-  struct rgb_unpacked_s m_fgcolor;        // foreground colour
+  rgb_unpacked_s m_bgcolor;        // background colour
+  rgb_unpacked_s m_fgcolor;        // foreground colour
 } display_char_s;
 
 

@@ -3,6 +3,7 @@
 #include <string>
 #include <algorithm>
 #include <vector>
+#include <map>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,7 +31,7 @@ struct source_symbol_desc_s{
 
 
 // source font desription
-struct source_font_desc_s{
+struct source_font_desc_s {
   std::vector<uint8_t> m_bmp;       // font symbols bmp
   int m_bmp_width;                  // font symbols bmp width
   int m_bmp_height;                 // font symbols bmp height
@@ -45,7 +46,6 @@ struct source_font_desc_s{
     , m_row_height(0)
     , m_def_code_idx(0)
     {}
-  }
 };
 
 
@@ -72,10 +72,26 @@ struct targaheader_s
 #define TGA_DATABITS        24
 
 
+struct compare_two_char_ptr {
+  bool operator () ( const char * const & a1, const char * const & a2 ) const {
+    return ::strcmp( a1, a2 ) < 0;
+  }
+};
+
+
+
+//
+std::string g_line_cache;
+std::map<const char *, const char *, compare_two_char_ptr> g_line_parts;
 // load font description from text file and bmp data from targa image file
 bool load_font_desc( FILE * a_fp, source_font_desc_s & a_dst );
 // write out .h and .c files with packed font
 void write_packed_font( FILE * a_out_h, FILE * a_out_c, const source_font_desc_s & a_src );
+//
+bool parse_line( char * a_src );
+//
+bool get_value( char * a_src, const char * a_name, std::string & a_dst );
+bool get_value( char * a_src, const char * a_name, int & a_dst );
 
 
 int main( int argc, char ** argv ) {
@@ -124,7 +140,7 @@ int main( int argc, char ** argv ) {
   }  
 
   write_packed_font( v_fp_out_h.get(), v_fp_out_c.get(), v_font_desc );
-
+/*
   // read targa header
   targaheader_s v_tga_head;
   ::bzero( &v_tga_head, sizeof(v_tga_head) );
@@ -242,7 +258,7 @@ int main( int argc, char ** argv ) {
     ::fprintf( v_fp_out_c.get(), "\n" );
   }
   ::fprintf( v_fp_out_c.get(), "};\n" );
-  
+*/
   return 0;
 }
 
@@ -267,10 +283,10 @@ bool load_font_desc( FILE * a_fp, source_font_desc_s & a_dst ) {
   // read "common" line
   int v_info_read_state = 0;
   int v_char_idx = 0;
-  while ( ::fgets( v_line, sizeof(v_line), a_fp ) {
+  while ( ::fgets( v_line, sizeof(v_line), a_fp ) ) {
     if ( 0 == ::strncmp( v_line, LN_START_COMMON, ::strlen(LN_START_COMMON) ) ) {
       if ( 0 != (v_info_read_state & RD_ST_COMMON) ) {
-        ::fprintf( "more than one line with '%s' at begin\n", LN_START_COMMON );
+        ::fprintf( stderr, "more than one line with '%s' at begin\n", LN_START_COMMON );
       }
       if ( !get_value( v_line, "lineHeight", a_dst.m_row_height )
         || !get_value( v_line, "scaleW", a_dst.m_bmp_width )
@@ -282,13 +298,13 @@ bool load_font_desc( FILE * a_fp, source_font_desc_s & a_dst ) {
     }
     if ( 0 == ::strncmp( v_line, LN_START_PAGE, ::strlen(LN_START_PAGE) ) ) {
       if ( 0 != (v_info_read_state & RD_ST_PAGE) ) {
-        ::fprintf( "more than one line with '%s' at begin\n", LN_START_PAGE );
+        ::fprintf( stderr, "more than one line with '%s' at begin\n", LN_START_PAGE );
       }
       std::string v_file_name;
       if ( !get_value( v_line, "file", v_file_name ) ) {
         return false;
       }
-      if ( !load_tga_file( v_line.c_str(), a_dst.m_bmp ) ) {
+      if ( !load_tga_file( v_file_name.c_str(), a_dst.m_bmp ) ) {
         return false;
       }
       v_info_read_state |= RD_ST_PAGE;
@@ -296,7 +312,7 @@ bool load_font_desc( FILE * a_fp, source_font_desc_s & a_dst ) {
     }
     if ( 0 == ::strncmp( v_line, LN_START_CHARS, ::strlen(LN_START_CHARS) ) ) {
       if ( 0 != (v_info_read_state & RD_ST_CHARS) ) {
-        ::fprintf( "more than one line with '%s' at begin\n", LN_START_CHARS );
+        ::fprintf( stderr, "more than one line with '%s' at begin\n", LN_START_CHARS );
       }
       if ( !get_value( v_line, "count", a_dst.m_symbols_count ) ) {
         return false;
@@ -310,7 +326,7 @@ bool load_font_desc( FILE * a_fp, source_font_desc_s & a_dst ) {
         ::fprintf( stderr, "not all font info exists\n" );
         return false;
       }
-      if ( v_char_idx >= a_dst.m_symbols.size() ) {
+      if ( v_char_idx >= (int)a_dst.m_symbols.size() ) {
         ::fprintf( stderr, "char definitions more than chars count\n" );
         return false;
       }
@@ -336,10 +352,72 @@ bool load_font_desc( FILE * a_fp, source_font_desc_s & a_dst ) {
 
 void write_packed_font( FILE * a_out_h, FILE * a_out_c, const source_font_desc_s & a_src ) {
   // write out font files
+  ::printf( "write font files\n" );
+}
+
+bool parse_line( char * a_src ) {
+  g_line_parts.clear();
+  char * v_ctx = 0;
+  char * v_ptr = ::strtok_r( a_src, " ", &v_ctx );
+  if ( ! v_ptr ) {
+    return false;
+  }
+  for ( v_ptr = ::strtok_r( 0, " ", &v_ctx ); v_ptr ; v_ptr = ::strtok_r( 0, " ", &v_ctx ) ) {
+    char * v_value = ::strchr( v_ptr, '=' );
+    if ( v_value ) {
+      *v_value++ = 0;
+    }
+    if ( ::strlen( v_ptr ) && ::strlen( v_value ) ) {
+      g_line_parts.emplace( v_ptr, v_value );
+    }
+  }
+  g_line_cache = a_src;
+  return true;
 }
 
 
-template<class T>
-bool get_value( const char * a_src, const char * a_name, T & a_dst ) {
+bool get_value( char * a_src, const char * a_name, std::string & a_dst ) {
+  if ( g_line_cache != a_src ) {
+    // parse line
+    if ( !parse_line(a_src) ) {
+      return false;
+    }
+  }
+  decltype(g_line_parts)::const_iterator v_it = g_line_parts.find(a_name);
+  if ( v_it != g_line_parts.cend() ) {
+    a_dst = v_it->second;
+    std::string::iterator it = std::remove_if(a_dst.begin(), a_dst.end(), [](int c){return 0 != isspace(c);});
+    if ( it != a_dst.end() ) {
+      a_dst.resize(it - a_dst.begin());
+    }
+    it = std::remove_if(a_dst.begin(), a_dst.end(), [](int c){return '"' == c;});
+    if ( it != a_dst.end() ) {
+      a_dst.resize(it - a_dst.begin());
+    }
+    return true;
+  }
   return false;
 }
+
+
+bool get_value( char * a_src, const char * a_name, int & a_dst ) {
+  if ( g_line_cache != a_src ) {
+    // parse line
+    if ( !parse_line(a_src) ) {
+      return false;
+    }
+  }
+  decltype(g_line_parts)::const_iterator v_it = g_line_parts.find(a_name);
+  if ( v_it != g_line_parts.cend() ) {
+    a_dst = (int)::strtol(v_it->second, 0,10);
+    return true;
+  }
+  return false;
+}
+
+
+bool load_tga_file( const char * a_file_name, std::vector<uint8_t> & a_dst ) {
+  ::printf( "loading file '%s'\n", a_file_name );
+  return true;
+}
+
