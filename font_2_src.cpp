@@ -40,6 +40,7 @@ struct source_font_desc_s {
   int m_def_code_idx;           // default symbol index, if symbol code not found
   int m_tga_line_bytes;         // bytes in one tga line
   int m_tga_pixel_bytes;        // bytes in one tga pixel (usually 3 or 4)
+  const char * m_header_file_name; // font header file name
   std::vector<source_symbol_desc_s> m_symbols; // descriptions of symbols ptr
   source_font_desc_s()
     : m_bmp_width(0)
@@ -49,6 +50,7 @@ struct source_font_desc_s {
     , m_def_code_idx(0)
     , m_tga_line_bytes(0)
     , m_tga_pixel_bytes(0)
+    , m_header_file_name(0)
     {}
 };
 
@@ -76,6 +78,7 @@ struct targaheader_s
 #define TGA_DATABITS        24
 
 
+// comparator for map with key const char *
 struct compare_two_char_ptr {
   bool operator () ( const char * const & a1, const char * const & a2 ) const {
     return ::strcmp( a1, a2 ) < 0;
@@ -83,39 +86,28 @@ struct compare_two_char_ptr {
 };
 
 
-
-//
+// line name, first get_value() parse key-value pairs, next just search in map
 std::string g_line_cache;
+// key-value pairs for current line
 std::map<const char *, const char *, compare_two_char_ptr> g_line_parts;
 // load font description from text file and bmp data from targa image file
 bool load_font_desc( FILE * a_fp, source_font_desc_s & a_dst );
 // write out .h and .c files with packed font
 void write_packed_font( FILE * a_out_h, FILE * a_out_c, const source_font_desc_s & a_src );
-//
+// parse params line
 bool parse_line( char * a_src );
-//
+// get string value
 bool get_value( char * a_src, const char * a_name, std::string & a_dst );
+// get int value
 bool get_value( char * a_src, const char * a_name, int & a_dst );
 
 
+// entry point
 int main( int argc, char ** argv ) {
   if ( 4 != argc ) {
     ::fprintf( stderr, "need a input.txt and output.h with output.c(pp) file names\n" );
     return 1;
   }
-
-  struct stat v_stat;
-  ::bzero( &v_stat, sizeof(v_stat) );
-
-  if ( 0 != ::stat( argv[1], &v_stat ) ) {
-    ::fprintf( stderr, "can't stat file '%s'\n", argv[1] );
-    return 1;
-  }
-  if ( ((off_t)(sizeof(targaheader_s) + TGA_FOOTER_SIZE)) >= v_stat.st_size ) {
-    ::fprintf( stderr, "file '%s' too small for truevision targa\n", argv[1] );
-    return 1;
-  }
-
 
   // font description from https://snowb.org/  
   std::unique_ptr<FILE, int(*)(FILE *)> v_fp_in(::fopen( argv[1], "rb" ), ::fclose);
@@ -136,8 +128,8 @@ int main( int argc, char ** argv ) {
     return 1;
   }
 
-
   source_font_desc_s v_font_desc;
+  v_font_desc.m_header_file_name = argv[2];
   if ( !load_font_desc(v_fp_in.get(), v_font_desc) ) {
     ::fprintf( stderr, "error loading font description from file '%s'\n", argv[1] );
     return 1;
@@ -151,6 +143,7 @@ int main( int argc, char ** argv ) {
 bool get_value( const char * a_src, const char * a_name, int & a_dst );
 bool get_value( const char * a_src, const char * a_name, std::string & a_dst );
 bool load_tga_file( const char * a_file_name, source_font_desc_s & a_dst );
+
 
 #define LN_START_COMMON   "common "
 #define LN_START_PAGE     "page "
@@ -234,11 +227,6 @@ bool load_font_desc( FILE * a_fp, source_font_desc_s & a_dst ) {
     && a_dst.m_symbols.size() == (size_t)v_char_idx );
 }
 
-
-void write_packed_font( FILE * a_out_h, FILE * a_out_c, const source_font_desc_s & a_src ) {
-  // write out font files
-  ::printf( "write font files\n" );
-}
 
 bool parse_line( char * a_src ) {
   g_line_parts.clear();
@@ -393,4 +381,13 @@ bool load_tga_file( const char * a_file_name, source_font_desc_s & a_dst ) {
   a_dst.m_tga_pixel_bytes = v_pixel_bytes;
   a_dst.m_tga_line_bytes = v_pixel_bytes * v_tga_head.width;
   return true;
+}
+
+
+void write_packed_font( FILE * a_out_h, FILE * a_out_c, const source_font_desc_s & a_src ) {
+  // write out font files
+  ::printf( "write font files\n" );
+  //
+  ::fprintf( a_out_h, "#include \"font_bmp.h\"\n\n" );
+  ::fprintf( a_out_c, "#include \"%s\"\n\n", a_src.m_header_file_name );
 }
