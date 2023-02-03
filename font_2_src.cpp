@@ -387,6 +387,16 @@ bool load_tga_file( const char * a_file_name, source_font_desc_s & a_dst ) {
 void write_packed_font( FILE * a_out_h, FILE * a_out_c, const source_font_desc_s & a_src ) {
   // write out font files
   ::printf( "write font files\n" );
+  // prepare packet bmp array
+  int v_current_idx = 0; // idx in v_symdata
+  bool v_lownibble = false; // current nibble to write
+  uint8_t v_currbyte; // current byte to write
+  std::vector<uint8_t> v_symdata; // bmp array
+  v_symdata.reserve( a_src.m_bmp_width * a_src.m_bmp_height / 2 );
+  // 
+  for ( const source_symbol_desc_s &s: a_src.m_symbols ) {
+    
+  }
   //
   ::fprintf( a_out_h, "#include \"font_bmp.h\"\n\n" );
   ::fprintf( a_out_c, "#include \"%s\"\n\n", a_src.m_header_file_name );

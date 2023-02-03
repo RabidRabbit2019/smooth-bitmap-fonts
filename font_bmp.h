@@ -4,6 +4,9 @@
 #include <inttypes.h>
 #include <stdbool.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 // packed symbol description
 typedef struct {
@@ -51,5 +54,10 @@ void display_char_init( display_char_s * a_data, uint32_t a_code, const struct f
 
 // prepare one row pixels buffer, returns true, if it was last row
 bool display_char_row( display_char_s * a_data );
+
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // __FONT_BMP_H__
