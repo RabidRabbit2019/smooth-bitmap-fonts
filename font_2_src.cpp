@@ -169,6 +169,16 @@ bool load_tga_file( const char * a_file_name, source_font_desc_s & a_dst );
 #define RD_ST_ALL     (RD_ST_INFO|RD_ST_COMMON|RD_ST_PAGE|RD_ST_CHARS)
 
 
+void replace_extra_symbols( std::string & a_str ) {
+  // replace symbols
+  for ( auto & c: a_str ) {
+    if ( !isalpha(c) and !isdigit(c) ) {
+      c = '_';
+    }
+  }
+}
+
+
 bool load_font_desc( FILE * a_fp, source_font_desc_s & a_dst ) {
   char v_line[1024];
   // read "common" line
@@ -188,11 +198,7 @@ bool load_font_desc( FILE * a_fp, source_font_desc_s & a_dst ) {
         return false;
       }
       // replace symbols
-      for ( auto & c: a_dst.m_face ) {
-        if ( !isalpha(c) and !isdigit(c) ) {
-          c = '_';
-        }
-      }
+      replace_extra_symbols( a_dst.m_face );
       if ( !a_dst.m_face.empty() ) {
         if ( !isalpha(a_dst.m_face.front()) ) {
           a_dst.m_face.insert( a_dst.m_face.begin(), 'f' );
@@ -298,17 +304,19 @@ bool get_value( char * a_src, const char * a_name, std::string & a_dst ) {
   decltype(g_line_parts)::const_iterator v_it = g_line_parts.find(a_name);
   if ( v_it != g_line_parts.cend() ) {
     a_dst = v_it->second;
+    bool v_remove_last_dquote = false;
     // trim string and remove double quotes
     while ( !a_dst.empty() && isspace(a_dst.front()) ) {
       a_dst.erase(a_dst.begin());
     }
     if ( !a_dst.empty() && '"' == a_dst.front() ) {
       a_dst.erase(a_dst.begin());
+      v_remove_last_dquote = true;
     }
     while ( !a_dst.empty() && isspace(a_dst.back()) ) {
       a_dst.pop_back();
     }
-    if ( !a_dst.empty() && '"' == a_dst.back() ) {
+    if ( v_remove_last_dquote && !a_dst.empty() && '"' == a_dst.back() ) {
       a_dst.pop_back();
     }
     return !a_dst.empty();
@@ -444,6 +452,15 @@ std::string get_packed_font_name( const source_font_desc_s & a_src ) {
 }
 
 
+std::string get_define_header_name( const source_font_desc_s & a_src ) {
+  std::string v_result( a_src.m_header_file_name );
+  replace_extra_symbols( v_result );
+  v_result.insert( v_result.begin(), {'_', '_'} );
+  v_result.append( "__" );
+  return v_result;
+}
+
+
 void write_packed_font( FILE * a_out_h, FILE * a_out_c, const source_font_desc_s & a_src ) {
   // write out font files
   ::printf( "write font files\n" );
@@ -534,8 +551,13 @@ void write_packed_font( FILE * a_out_h, FILE * a_out_c, const source_font_desc_s
     v_symdata[v_write_idx++] = v_curr_byte;
   }
   // includes
-  ::fprintf( a_out_h, "#include \"font_bmp.h\"\n\n" );
-  ::fprintf( a_out_c, "#include \"%s\"\n\n", a_src.m_header_file_name );
+  std::string v_define_header_name = get_define_header_name( a_src );
+  ::fprintf( a_out_h
+           , "#ifndef %s\n#define %s\n\n#include \"font_bmp.h\"\n\n#ifdef __cplusplus\nextern \"C\" {\n#endif\n\n"
+           , v_define_header_name.c_str()
+           , v_define_header_name.c_str()
+           );
+  ::fprintf( a_out_c, "#include \"%s\"\n\n#ifdef __cplusplus\nextern \"C\" {\n#endif\n\n", a_src.m_header_file_name );
   // write symbols packed data
   std::string v_packed_data_name = get_packed_data_name( a_src );
   ::fprintf( a_out_c, "static const uint8_t %s[%d] = {\n", v_packed_data_name.c_str(), v_write_idx );
@@ -580,7 +602,11 @@ void write_packed_font( FILE * a_out_h, FILE * a_out_c, const source_font_desc_s
   ::fprintf( a_out_c, "};\n\n" );
   // write font description
   std::string v_font_desc_name = get_packed_font_name( a_src );
-  ::fprintf( a_out_h, "extern const packed_font_desc_s %s;\n", v_font_desc_name.c_str() );
+  ::fprintf( a_out_h
+           , "extern const packed_font_desc_s %s;\n\n#ifdef __cplusplus\n}\n#endif\n\n#endif // %s\n"
+           , v_font_desc_name.c_str()
+           , v_define_header_name.c_str()
+           );
   ::fprintf( a_out_c, "const packed_font_desc_s %s = {\n", v_font_desc_name.c_str() );
   ::fprintf( a_out_c
            , "%s, %d, %d, %d, %s"
@@ -590,5 +616,5 @@ void write_packed_font( FILE * a_out_h, FILE * a_out_c, const source_font_desc_s
            , a_src.m_def_code_idx
            , v_packes_symbols_name.c_str()
            );
-  ::fprintf( a_out_c, "\n};\n" );
+  ::fprintf( a_out_c, "\n};\n\n#ifdef __cplusplus\n}\n#endif\n" );
 }
