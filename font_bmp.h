@@ -11,7 +11,8 @@ extern "C" {
 // packed symbol description
 typedef struct {
   uint32_t m_code;       // code
-  uint32_t m_offset;     // index of first byte symbol's packed data
+  uint32_t m_offset: 31; // index of first byte symbol's packed data
+  uint32_t m_nibble: 1;  // start nibble, 0 - high, 1 - low
   uint8_t m_width;       // width in pixels of symbol bitmap
   uint8_t m_height;      // height in pixels of symbol bitmap
   uint8_t m_x_offset;    // x offset for display symbol
@@ -25,8 +26,8 @@ typedef struct {
   const uint8_t * m_bmp;            // font packed data ptr
   int m_symbols_count;              // total symbols
   int m_row_height;                 // text row height
-  int m_def_code_idx;               // default symbol index, if symbol code not found
-  const struct symbol_desc_s * m_symbols; // descriptions of symbols ptr
+  uint32_t m_def_code_idx;          // default symbol index, if symbol code not found
+  const packed_symbol_desc_s * m_symbols; // descriptions of symbols ptr
 } packed_font_desc_s;
 
 
@@ -38,19 +39,21 @@ typedef struct {
 
 // display char structure
 typedef struct {
-  const struct font_desc_s * m_font;      // font desc ptr
-  const struct symbol_desc_s * m_symbol;  // symbol desc ptr
+  const packed_font_desc_s * m_font;      // font desc ptr
+  const packed_symbol_desc_s * m_symbol;  // symbol desc ptr
   const uint8_t * m_bmp_ptr;              // symbol packed data ptr
   int m_row;                              // current row to display
   uint16_t * m_pixbuf;                    // dst pixels row
   int m_cols_count;                       // width of pixels for symbol place
-  rgb_unpacked_s m_bgcolor;        // background colour
-  rgb_unpacked_s m_fgcolor;        // foreground colour
+  bool m_curr_nibble;                     // current nibble
+  uint16_t m_bgcolor_org;          // original background color
+  rgb_unpacked_s m_bgcolor;        // rgb background colour
+  rgb_unpacked_s m_fgcolor;        // rgb foreground colour
 } display_char_s;
 
 
 // prepare to display symbol, init a_data structure
-void display_char_init( display_char_s * a_data, uint32_t a_code, const struct font_desc_s * a_font, uint16_t * a_dst_row, uint16_t a_bgcolor, uint16_t a_fgcolor );
+void display_char_init( display_char_s * a_data, uint32_t a_code, const packed_font_desc_s * a_font, uint16_t * a_dst_row, uint16_t a_bgcolor, uint16_t a_fgcolor );
 
 // prepare one row pixels buffer, returns true, if it was last row
 bool display_char_row( display_char_s * a_data );

@@ -27,6 +27,16 @@ struct source_symbol_desc_s{
   int m_x_offset;    // x offset for display symbol
   int m_y_offset;    // y offset for display symbol
   int m_x_advance;   // displayed width of symbol
+  void fill_packed( packed_symbol_desc_s & a_dst, int a_offset, bool a_nibble ) const {
+    a_dst.m_code = m_code;
+    a_dst.m_offset = a_offset;
+    a_dst.m_nibble = (a_nibble ? 1 : 0);
+    a_dst.m_width = m_width;
+    a_dst.m_height = m_height;
+    a_dst.m_x_offset = m_x_offset;
+    a_dst.m_y_offset = m_y_offset;
+    a_dst.m_x_advance = m_x_advance;
+  }
 };
 
 
@@ -41,6 +51,7 @@ struct source_font_desc_s {
   int m_tga_line_bytes;         // bytes in one tga line
   int m_tga_pixel_bytes;        // bytes in one tga pixel (usually 3 or 4)
   const char * m_header_file_name; // font header file name
+  std::string m_face;           // font face name, using as alias name
   std::vector<source_symbol_desc_s> m_symbols; // descriptions of symbols ptr
   source_font_desc_s()
     : m_bmp_width(0)
@@ -145,15 +156,17 @@ bool get_value( const char * a_src, const char * a_name, std::string & a_dst );
 bool load_tga_file( const char * a_file_name, source_font_desc_s & a_dst );
 
 
+#define LN_START_INFO     "info "
 #define LN_START_COMMON   "common "
 #define LN_START_PAGE     "page "
 #define LN_START_CHARS    "chars "
 #define LN_START_CHAR     "char "
 
-#define RD_ST_COMMON  (1 << 0)
-#define RD_ST_PAGE    (1 << 1)
-#define RD_ST_CHARS   (1 << 2)
-#define RD_ST_ALL     (RD_ST_COMMON|RD_ST_PAGE|RD_ST_CHARS)
+#define RD_ST_INFO    (1 << 0)
+#define RD_ST_COMMON  (1 << 1)
+#define RD_ST_PAGE    (1 << 2)
+#define RD_ST_CHARS   (1 << 3)
+#define RD_ST_ALL     (RD_ST_INFO|RD_ST_COMMON|RD_ST_PAGE|RD_ST_CHARS)
 
 
 bool load_font_desc( FILE * a_fp, source_font_desc_s & a_dst ) {
@@ -162,6 +175,32 @@ bool load_font_desc( FILE * a_fp, source_font_desc_s & a_dst ) {
   int v_info_read_state = 0;
   int v_char_idx = 0;
   while ( ::fgets( v_line, sizeof(v_line), a_fp ) ) {
+    if ( 0 == ::strncmp( v_line, LN_START_INFO, ::strlen(LN_START_INFO) ) ) {
+      if ( 0 != (v_info_read_state & RD_ST_INFO) ) {
+        ::fprintf( stderr, "more than one line with '%s' at begin\n", LN_START_INFO );
+      }
+      if ( !get_value( v_line, "face", a_dst.m_face ) ) {
+        return false;
+      }
+      //
+      if ( a_dst.m_face.empty() ) {
+        ::fprintf( stderr, "info.face seems to be empty string\n" );
+        return false;
+      }
+      // replace symbols
+      for ( auto & c: a_dst.m_face ) {
+        if ( !isalpha(c) and !isdigit(c) ) {
+          c = '_';
+        }
+      }
+      if ( !a_dst.m_face.empty() ) {
+        if ( !isalpha(a_dst.m_face.front()) ) {
+          a_dst.m_face.insert( a_dst.m_face.begin(), 'f' );
+        }
+      }
+      v_info_read_state |= RD_ST_INFO;
+      continue;
+    }
     if ( 0 == ::strncmp( v_line, LN_START_COMMON, ::strlen(LN_START_COMMON) ) ) {
       if ( 0 != (v_info_read_state & RD_ST_COMMON) ) {
         ::fprintf( stderr, "more than one line with '%s' at begin\n", LN_START_COMMON );
@@ -384,20 +423,172 @@ bool load_tga_file( const char * a_file_name, source_font_desc_s & a_dst ) {
 }
 
 
+std::string get_packed_data_name( const source_font_desc_s & a_src ) {
+  std::string v_result = a_src.m_face;
+  v_result.append( "_data" );
+  return v_result;
+}
+
+
+std::string get_packed_symbols_name( const source_font_desc_s & a_src ) {
+  std::string v_result = a_src.m_face;
+  v_result.append( "_symdesc" );
+  return v_result;
+}
+
+
+std::string get_packed_font_name( const source_font_desc_s & a_src ) {
+  std::string v_result = a_src.m_face;
+  v_result.append( "_font" );
+  return v_result;
+}
+
+
 void write_packed_font( FILE * a_out_h, FILE * a_out_c, const source_font_desc_s & a_src ) {
   // write out font files
   ::printf( "write font files\n" );
   // prepare packet bmp array
-  int v_current_idx = 0; // idx in v_symdata
-  bool v_lownibble = false; // current nibble to write
-  uint8_t v_currbyte; // current byte to write
+  bool v_curr_nibble = false; // current nibble to write, false - high, true - low
+  uint8_t v_curr_byte = 0; // current byte to write
   std::vector<uint8_t> v_symdata; // bmp array
-  v_symdata.reserve( a_src.m_bmp_width * a_src.m_bmp_height / 2 );
+  v_symdata.resize( a_src.m_bmp_width * a_src.m_bmp_height / 2 );
+  // packed symbols desc
+  std::vector<packed_symbol_desc_s> v_psyms;
+  v_psyms.resize(a_src.m_symbols_count);
+  // symbol index
+  int v_sym_idx = 0;
+  // index of byte to write into v_sym_data
+  int v_write_idx = 0;
   // 
   for ( const source_symbol_desc_s &s: a_src.m_symbols ) {
-    
+    // fill packed symbol info
+    s.fill_packed( v_psyms[v_sym_idx++], v_write_idx, v_curr_nibble );
+    // calc idx in pixels array
+    int v_bmp_idx = (s.m_y * a_src.m_tga_line_bytes) + (s.m_x * a_src.m_tga_pixel_bytes);
+    // current color 0
+    int v_curr_color = 0;
+    int v_curr_color_counter = 0;
+    for ( int y = 0; y < s.m_height; ++y ) {
+      for ( int x = 0; x < s.m_width; ++x ) {
+        int v_color = ((a_src.m_bmp.at(v_bmp_idx) + a_src.m_bmp.at(v_bmp_idx + 1) + a_src.m_bmp.at(v_bmp_idx + 2)) / 3) >> 5;
+        if ( v_color != v_curr_color ) {
+          // first check v_curr_color_counter
+          if ( v_curr_color_counter > 0 ) {
+            if ( v_curr_nibble ) {
+              v_curr_byte |= (v_curr_color_counter - 1) | 0x8;
+              v_symdata[v_write_idx++] = v_curr_byte;
+              v_curr_nibble = false;
+              v_curr_byte = 0;
+            } else {
+              v_curr_byte |= ((v_curr_color_counter - 1) | 0x8) << 4;
+              v_curr_nibble = true;
+            }
+            v_curr_color_counter = 0;
+          }
+          v_curr_color = v_color;
+          //
+          if ( v_curr_nibble ) {
+            v_curr_byte |= v_color;
+            v_symdata[v_write_idx++] = v_curr_byte;
+            v_curr_nibble = false;
+            v_curr_byte = 0;
+          } else {
+            v_curr_byte |= v_color << 4;
+            v_curr_nibble = true;
+          }
+        } else {
+          // each counter from 1 to 8
+          if ( ++v_curr_color_counter >= 8 ) {
+            if ( v_curr_nibble ) {
+              v_curr_byte |= 0x0F;
+              v_symdata[v_write_idx++] = v_curr_byte;
+              v_curr_nibble = false;
+              v_curr_byte = 0;
+            } else {
+              v_curr_byte |= 0xF0;
+              v_curr_nibble = true;
+            }
+            v_curr_color_counter = 0;
+          }
+        }
+        v_bmp_idx += a_src.m_tga_pixel_bytes;
+      }
+      v_bmp_idx += (a_src.m_bmp_width - s.m_width) * a_src.m_tga_pixel_bytes;
+    }
+    // check v_curr_color_counter
+    if ( v_curr_color_counter > 0 ) {
+      // write last nibble of symbol
+      if ( v_curr_nibble ) {
+        v_curr_byte |= (v_curr_color_counter - 1) | 0x8;
+        v_symdata[v_write_idx++] = v_curr_byte;
+        v_curr_nibble = false;
+        v_curr_byte = 0;
+      } else {
+        v_curr_byte |= ((v_curr_color_counter - 1) | 0x8) << 4;
+        v_curr_nibble = true;
+      }
+    }
   }
-  //
+  // last nibble
+  if ( v_curr_nibble ) {
+    v_symdata[v_write_idx++] = v_curr_byte;
+  }
+  // includes
   ::fprintf( a_out_h, "#include \"font_bmp.h\"\n\n" );
   ::fprintf( a_out_c, "#include \"%s\"\n\n", a_src.m_header_file_name );
+  // write symbols packed data
+  std::string v_packed_data_name = get_packed_data_name( a_src );
+  ::fprintf( a_out_c, "static const uint8_t %s[%d] = {\n", v_packed_data_name.c_str(), v_write_idx );
+  int v_line_bytes_count = 0;
+  for ( int i = 0; i < v_write_idx; ++i ) {
+    if ( 0 == i ) {
+      ::fprintf( a_out_c, " " );
+    } else {
+      ::fprintf( a_out_c, "," );
+    }
+    ::fprintf( a_out_c, " 0x%02X", v_symdata.at(i) );
+    if ( ++v_line_bytes_count >= 16 ) {
+      ::fprintf( a_out_c, "\n" );
+      v_line_bytes_count = 0;
+    }
+  }
+  if ( 0 != v_line_bytes_count ) {
+    ::fprintf( a_out_c, "\n" );
+  }
+  ::fprintf( a_out_c, "};\n\n" );
+  // write symbols description
+  std::string v_packes_symbols_name = get_packed_symbols_name( a_src );
+  ::fprintf( a_out_c, "static const packed_symbol_desc_s %s[%d] = {\n", v_packes_symbols_name.c_str(), a_src.m_symbols_count );
+  for ( int i = 0; i < a_src.m_symbols_count; ++i ) {
+    if ( 0 == i ) {
+      ::fprintf( a_out_c, " " );
+    } else {
+      ::fprintf( a_out_c, "," );
+    }
+    ::fprintf( a_out_c
+             , " {%u, %u, %u, %u, %u, %u, %u, %u}\n"
+             , v_psyms.at(i).m_code
+             , v_psyms.at(i).m_offset
+             , v_psyms.at(i).m_nibble
+             , v_psyms.at(i).m_width
+             , v_psyms.at(i).m_height
+             , v_psyms.at(i).m_x_offset
+             , v_psyms.at(i).m_y_offset
+             , v_psyms.at(i).m_x_advance
+             );
+  }
+  ::fprintf( a_out_c, "};\n\n" );
+  // write font description
+  std::string v_font_desc_name = get_packed_font_name( a_src );
+  ::fprintf( a_out_h, "extern const packed_font_desc_s %s;\n", v_font_desc_name.c_str() );
+  ::fprintf( a_out_c, "const packed_font_desc_s %s = {\n", v_font_desc_name.c_str() );
+  ::fprintf( a_out_c
+           , "%s, %d, %d, %d, %s"
+           , v_packed_data_name.c_str()
+           , a_src.m_symbols_count
+           , a_src.m_row_height
+           , a_src.m_def_code_idx
+           , v_packes_symbols_name.c_str()
+           );
+  ::fprintf( a_out_c, "\n};\n" );
 }
