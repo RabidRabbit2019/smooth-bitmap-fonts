@@ -74,7 +74,8 @@ void display_char_init( display_char_s * a_data, uint32_t a_code, const packed_f
     v_rgb.b = ((v_rgb_bg.b * (7 - i)) / 7)
             + ((v_rgb_fg.b * i) / 7)
             ;
-    a_data->m_colors[i] = pack_color( &v_rgb );
+    uint16_t v_c = pack_color( &v_rgb );
+    a_data->m_colors[i] = (v_c >> 8) | (v_c << 8);
   }
 }
 
@@ -89,6 +90,8 @@ void display_char_init2( display_char_s * a_data, uint32_t a_code ) {
   a_data->m_counter = 0;
   a_data->m_curr_color = 0;
   a_data->m_curr_byte = *a_data->m_bmp_ptr++;
+  a_data->m_last_row = a_data->m_symbol->m_y_offset + a_data->m_symbol->m_height;
+  a_data->m_last_col = a_data->m_symbol->m_x_offset + a_data->m_symbol->m_width;
 }
 
 

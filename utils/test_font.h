@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-extern const packed_font_desc_s reduced_set_font;
+extern const packed_font_desc_s test_font_font;
 
 #ifdef __cplusplus
 }
