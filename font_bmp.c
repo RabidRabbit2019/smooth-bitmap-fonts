@@ -158,6 +158,99 @@ bool display_char_row( display_char_s * a_data ) {
 }
 
 
+//
+uint32_t get_next_utf8_code( const char ** a_ptr ) {
+  uint8_t c0 = (uint8_t)*(*a_ptr)++;
+  // one byte
+  if ( 0 == (c0 & 0x80) ) {
+    return c0;
+  }
+  // two bytes
+  if ( 0xC0 == (c0 & 0xE0) ) {
+    uint8_t c1 = (uint8_t)*(*a_ptr)++;
+    if ( 0x80 == (c1 & 0xC0) ) {
+      return ((c0 & 0x1F) << 6) | (c1 & 0x3F);
+    } else {
+      return 0;
+    }
+  }
+  // three bytes
+  if ( 0xE0 == (c0 & 0xF0) ) {
+    uint8_t c1 = (uint8_t)*(*a_ptr)++;
+    if ( 0x80 == (c1 & 0xC0) ) {
+      uint8_t c2 = (uint8_t)*(*a_ptr)++;
+      if ( 0x80 == (c2 & 0xC0) ) {
+        return ((c0 & 0x1F) << 12) | ((c1 & 0x3F) << 6) | (c2 & 0x3F);
+      } else {
+        return 0;
+      }
+    } else {
+      return 0;
+    }
+  }
+  // four bytes
+  if ( 0xF0 == (c0 & 0xF8) ) {
+    uint8_t c1 = (uint8_t)*(*a_ptr)++;
+    if ( 0x80 == (c1 & 0xC0) ) {
+      uint8_t c2 = (uint8_t)*(*a_ptr)++;
+      if ( 0x80 == (c2 & 0xC0) ) {
+        uint8_t c3 = (uint8_t)*(*a_ptr)++;
+        if ( 0x80 == (c3 & 0xC0) ) {
+          return ((c0 & 0x1F) << 12) | ((c1 & 0x3F) << 6) | (c2 & 0x3F);
+        } else {
+          return 0;
+        }
+      } else {
+        return 0;
+      }
+    } else {
+      return 0;
+    }
+  } else {
+    return 0;
+  }
+}
+
+
+//
+void get_text_extent( const packed_font_desc_s * a_font, const char * a_str, int * a_width, int * a_height ) {
+  int v_width = 0;
+  int v_height = 0;
+  int v_max_width = 0;
+  int v_height_add = a_font->m_row_height;
+  int v_idx;
+  // scan all characters
+  for ( uint32_t c = get_next_utf8_code( &a_str ); 0 != c; c = get_next_utf8_code( &a_str ) ) {
+    if ( '\r' == c ) {
+      // CR
+      v_width = 0;
+      continue;
+    }
+    if ( '\n' == c ) {
+      // LF unix style
+      v_height_add += a_font->m_row_height;
+      v_width = 0;
+      continue;
+    }
+    // increase height at first symbol
+    if ( 0 == v_width ) {
+      v_height += v_height_add;
+      v_height_add = 0;
+    }
+    //
+    v_idx = find_symbol_index( a_font, c );
+    v_width += a_font->m_symbols[v_idx].m_x_advance;
+    //
+    if ( v_width > v_max_width ) {
+      v_max_width = v_width;
+    }
+  }
+  // result
+  *a_width = v_max_width;
+  *a_height = v_height;
+}
+
+
 #ifdef __cplusplus
 }
 #endif

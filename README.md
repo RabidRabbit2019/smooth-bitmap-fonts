@@ -8,12 +8,18 @@ Library for display bitmap-based raster fonts from https://snowb.org/
 4. display smooth images of symbols with 8 grades from background to foreground
    (0 - background colour, 7 - foreground colour, 1..6 - shades)
 5. current code support 16 bits per pixel
+6. suitable for unicode
 
 ## Build
 g++ font_2_src.cpp -Wall -Wextra -O2 -s -o font_2_src
 
+## Files
+1. font_2_src.cpp - conversion utility
+2. font_bmp.h - header
+3. font_bmp.c - support routines
+
 ## Using
-1. go to and set up your character set
+1. go to https://snowb.org/ and set up your character set
 2. use white for foreground color and black for background
 3. export font with "Font Name" = test_font, "File Name" = test_font and "Format" = "BMFont TEXT"
 4. unpack archive test_font.zip (two files: test_font.png and test_font.txt)
@@ -23,9 +29,10 @@ g++ font_2_src.cpp -Wall -Wextra -O2 -s -o font_2_src
 
 ## Extra
 in utils/ directory:
-1. font_bmp.c - release display routine for ST7735 like display controller
-2. test_font.h and test_font.c - example font
-3. test_font_bmp.cpp - test utility
-4. build: g++ test_font_bmp.cpp font_bmp.c test_font.c -I ../ -Wall -Wextra -O0 -g -o test_font_bmp
-5. test: ./test_font_bmp "%" | hexdump -v -e '"%04_ad |" 50/1 "%02X" "|\n"'
-6. 50 - x_advance parameter of symbol "%" in this font
+1. test32.h and test32.c - example font
+2. test_font_bmp.cpp - test utility
+3. build: g++ test_font_bmp.cpp font_bmp.c test_font.c -I ../ -Wall -Wextra -O0 -g -o test_font_bmp
+4. test: ./test_font_bmp "!"
+
+## Example
+Weather station, see at https://github.com/RabidRabbit2019/weather-station

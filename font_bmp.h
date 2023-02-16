@@ -62,6 +62,10 @@ void display_char_init2( display_char_s * a_data, uint32_t a_code );
 
 // prepare one row pixels buffer, returns true, if it was last row
 bool display_char_row( display_char_s * a_data );
+// get rectangle size for text
+void get_text_extent( const packed_font_desc_s * a_font, const char * a_str, int * a_width, int * a_height );
+// get next symbol (uni)code
+uint32_t get_next_utf8_code( const char ** a_ptr );
 
 
 #ifdef __cplusplus

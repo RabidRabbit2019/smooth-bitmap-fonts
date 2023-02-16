@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <vector>
 #include <map>
+#include <algorithm>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -53,6 +54,7 @@ struct source_font_desc_s {
   const char * m_header_file_name; // font header file name
   std::string m_face;           // font face name, using as alias name
   std::vector<source_symbol_desc_s> m_symbols; // descriptions of symbols ptr
+  int m_max_symbol_width;       // in pixels
   source_font_desc_s()
     : m_bmp_width(0)
     , m_bmp_height(0)
@@ -62,6 +64,7 @@ struct source_font_desc_s {
     , m_tga_line_bytes(0)
     , m_tga_pixel_bytes(0)
     , m_header_file_name(0)
+    , m_max_symbol_width(0)
     {}
 };
 
@@ -95,6 +98,11 @@ struct compare_two_char_ptr {
     return ::strcmp( a1, a2 ) < 0;
   }
 };
+
+// comparator for source_symbol_desc_s by m_code
+bool compare_two_source_symbol_desc_s( const source_symbol_desc_s & a1, const source_symbol_desc_s & a2 ) {
+  return a1.m_code < a2.m_code;
+}
 
 
 // line name, first get_value() parse key-value pairs, next just search in map
@@ -145,14 +153,15 @@ int main( int argc, char ** argv ) {
     ::fprintf( stderr, "error loading font description from file '%s'\n", argv[1] );
     return 1;
   }  
+  // sort symbols by its code
+  std::make_heap( v_font_desc.m_symbols.begin(), v_font_desc.m_symbols.end(), compare_two_source_symbol_desc_s );
+  std::sort_heap( v_font_desc.m_symbols.begin(), v_font_desc.m_symbols.end(), compare_two_source_symbol_desc_s );
 
   write_packed_font( v_fp_out_h.get(), v_fp_out_c.get(), v_font_desc );
   return 0;
 }
 
 
-bool get_value( const char * a_src, const char * a_name, int & a_dst );
-bool get_value( const char * a_src, const char * a_name, std::string & a_dst );
 bool load_tga_file( const char * a_file_name, source_font_desc_s & a_dst );
 
 
@@ -263,6 +272,18 @@ bool load_font_desc( FILE * a_fp, source_font_desc_s & a_dst ) {
         || !get_value( v_line, "xadvance", a_dst.m_symbols[v_char_idx].m_x_advance ) ) {
         return false;
       }
+      // no support for offsets less than zero
+      if ( a_dst.m_symbols[v_char_idx].m_x_offset < 0 ) {
+        a_dst.m_symbols[v_char_idx].m_x_offset = 0;
+      }
+      if ( a_dst.m_symbols[v_char_idx].m_y_offset < 0 ) {
+        a_dst.m_symbols[v_char_idx].m_y_offset = 0;
+      }
+      // update max symbol width
+      if ( a_dst.m_max_symbol_width < a_dst.m_symbols[v_char_idx].m_x_advance ) {
+        a_dst.m_max_symbol_width = a_dst.m_symbols[v_char_idx].m_x_advance;
+      }
+      //
       ++v_char_idx;
     }
   }
@@ -602,6 +623,11 @@ void write_packed_font( FILE * a_out_h, FILE * a_out_c, const source_font_desc_s
   ::fprintf( a_out_c, "};\n\n" );
   // write font description
   std::string v_font_desc_name = get_packed_font_name( a_src );
+  ::fprintf( a_out_h
+           , "#define %s_MAX_SYMBOL_WIDTH %d\n\n"
+           , v_font_desc_name.c_str()
+           , a_src.m_max_symbol_width
+           );
   ::fprintf( a_out_h
            , "extern const packed_font_desc_s %s;\n\n#ifdef __cplusplus\n}\n#endif\n\n#endif // %s\n"
            , v_font_desc_name.c_str()
