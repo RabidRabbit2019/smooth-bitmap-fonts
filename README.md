@@ -36,3 +36,4 @@ in utils/ directory:
 
 ## Example
 Weather station, see at https://github.com/RabidRabbit2019/weather-station
+Screen with some symbols: https://lira39.tk/weather_station_screen.png
