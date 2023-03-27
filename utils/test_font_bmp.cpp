@@ -8,7 +8,8 @@ int main( int, char ** argv ) {
    uint16_t v_row[test32_font_MAX_SYMBOL_WIDTH];
    const char * s = argv[1];
    uint32_t c = get_next_utf8_code( &s );
-   display_char_init( &v, c, &test32_font, v_row, 0, 0xFFFF );
+   uint16_t v_colors[8];
+   display_char_init( &v, c, &test32_font, v_row, 0, 0xFFFF, v_colors );
    bool v_rc;
    do {
      v_rc = display_char_row( &v );

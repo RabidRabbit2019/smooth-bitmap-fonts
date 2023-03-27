@@ -45,7 +45,15 @@ static uint16_t pack_color( rgb_unpacked_s * a_src ) {
 }
 
 // prepare to display symbol, init a_data structure
-void display_char_init( display_char_s * a_data, uint32_t a_code, const packed_font_desc_s * a_font, uint16_t * a_dst_row, uint16_t a_bgcolor, uint16_t a_fgcolor ) {
+void display_char_init(
+        display_char_s * a_data
+      , uint32_t a_code
+      , const packed_font_desc_s * a_font
+      , uint16_t * a_dst_row
+      , uint16_t a_bgcolor
+      , uint16_t a_fgcolor
+      , uint16_t * a_colors_tbl
+       ) {
   a_data->m_font = a_font;
   a_data->m_symbol = &(a_font->m_symbols[find_symbol_index(a_font, a_code)]);
   a_data->m_bmp_ptr = a_font->m_bmp + a_data->m_symbol->m_offset;
@@ -59,6 +67,7 @@ void display_char_init( display_char_s * a_data, uint32_t a_code, const packed_f
   a_data->m_last_row = a_data->m_symbol->m_y_offset + a_data->m_symbol->m_height;
   a_data->m_last_col = a_data->m_symbol->m_x_offset + a_data->m_symbol->m_width;
   // gen colors table
+  a_data->m_colors = a_colors_tbl;
   rgb_unpacked_s v_rgb_bg;
   rgb_unpacked_s v_rgb_fg;
   rgb_unpacked_s v_rgb;
@@ -80,7 +89,7 @@ void display_char_init( display_char_s * a_data, uint32_t a_code, const packed_f
 }
 
 
-// prepare to display symbol, usign existing font, colors and buffer
+// prepare to display symbol, using existing font, colors and buffer
 void display_char_init2( display_char_s * a_data, uint32_t a_code ) {
   a_data->m_symbol = &(a_data->m_font->m_symbols[find_symbol_index(a_data->m_font, a_code)]);
   a_data->m_bmp_ptr = a_data->m_font->m_bmp + a_data->m_symbol->m_offset;
@@ -92,6 +101,19 @@ void display_char_init2( display_char_s * a_data, uint32_t a_code ) {
   a_data->m_curr_byte = *a_data->m_bmp_ptr++;
   a_data->m_last_row = a_data->m_symbol->m_y_offset + a_data->m_symbol->m_height;
   a_data->m_last_col = a_data->m_symbol->m_x_offset + a_data->m_symbol->m_width;
+}
+
+
+// prepare to display symbol, init a_data structure using font and colors from other
+void display_char_init3( display_char_s * a_data, uint32_t a_code, uint16_t * a_dst_row, display_char_s * a_from ) {
+  // copy font ptr
+  a_data->m_font = a_from->m_font;
+  // prepare fields
+  display_char_init2( a_data, a_code );
+  // set buffer
+  a_data->m_pixbuf = a_dst_row;
+  // copy colors ptr
+  a_data->m_colors = a_from->m_colors;
 }
 
 

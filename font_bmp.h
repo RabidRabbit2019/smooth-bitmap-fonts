@@ -45,7 +45,7 @@ typedef struct {
   int m_row;                              // current row to display
   uint16_t * m_pixbuf;                    // dst pixels row
   int m_cols_count;                       // width of pixels for symbol place
-  uint16_t m_colors[8];                   // colors scale from background to foreground
+  uint16_t * m_colors;                    // ptr to 8 colors, scale from background to foreground
   int m_counter;                          // repeated colors
   int m_curr_color;                       // current color
   int m_last_row;                         // last symbol row within it place
@@ -56,9 +56,11 @@ typedef struct {
 
 
 // prepare to display symbol, init a_data structure
-void display_char_init( display_char_s * a_data, uint32_t a_code, const packed_font_desc_s * a_font, uint16_t * a_dst_row, uint16_t a_bgcolor, uint16_t a_fgcolor );
+void display_char_init( display_char_s * a_data, uint32_t a_code, const packed_font_desc_s * a_font, uint16_t * a_dst_row, uint16_t a_bgcolor, uint16_t a_fgcolor, uint16_t * a_colors_tbl );
 // prepare to display symbol, init a_data structure using existing font, colors and buffer
 void display_char_init2( display_char_s * a_data, uint32_t a_code );
+// prepare to display symbol, init a_data structure using font and colors from other
+void display_char_init3( display_char_s * a_data, uint32_t a_code, uint16_t * a_dst_row, display_char_s * a_from );
 
 // prepare one row pixels buffer, returns true, if it was last row
 bool display_char_row( display_char_s * a_data );
